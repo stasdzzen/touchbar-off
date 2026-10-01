@@ -1,0 +1,7 @@
+.DS_Store
+/build/
+/dist/
+/touchbarctl
+/test-app
+/inspect
+/inspect.m
