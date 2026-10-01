@@ -13,8 +13,8 @@
 
 @interface AppDelegate : NSObject <NSApplicationDelegate>
 @property NSStatusItem *statusItem;
-@property NSPopover *popover;
-@property NSSwitch *toggle;
+@property NSMenu *menu;
+@property NSButton *toggle;
 @property id brightnessClient;
 @property BOOL enabled;
 @property BOOL ready;
@@ -32,35 +32,31 @@
     self.statusItem.button.image = icon;
     if (!icon) self.statusItem.button.title = @"TB";
     self.statusItem.button.accessibilityLabel = @"Touch Bar";
-    self.statusItem.button.target = self;
-    self.statusItem.button.action = @selector(showPopover:);
+    self.menu = [NSMenu new];
+    self.menu.autoenablesItems = NO;
+    self.statusItem.menu = self.menu;
 
-    NSViewController *controller = [NSViewController new];
-    controller.view = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 230, 100)];
-    NSTextField *label = [NSTextField labelWithString:@"Touch Bar"];
-    label.font = [NSFont systemFontOfSize:14 weight:NSFontWeightMedium];
-    label.frame = NSMakeRect(18, 61, 140, 22);
-    [controller.view addSubview:label];
-    self.toggle = [[NSSwitch alloc] initWithFrame:NSMakeRect(172, 59, 40, 25)];
-    self.toggle.accessibilityLabel = @"Touch Bar";
-    self.toggle.toolTip = @"Включить или погасить панель";
-    self.toggle.target = self;
-    self.toggle.action = @selector(togglePanel:);
+    // Обычное меню macOS; собственная только строка цветной кнопки.
+    NSView *row = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 218, 44)];
+    self.toggle = [NSButton buttonWithTitle:@"" target:self action:@selector(togglePanel:)];
+    self.toggle.frame = NSMakeRect(14, 7, 190, 30);
+    self.toggle.bezelStyle = NSBezelStyleRounded;
+    self.toggle.font = [NSFont systemFontOfSize:13 weight:NSFontWeightMedium];
+    self.toggle.contentTintColor = NSColor.whiteColor;
+    self.toggle.accessibilityLabel = @"Переключить Touch Bar";
     self.toggle.enabled = NO;
-    [controller.view addSubview:self.toggle];
+    [row addSubview:self.toggle];
+    NSMenuItem *control = [NSMenuItem new];
+    control.view = row;
+    [self.menu addItem:control];
 
-    NSBox *separator = [[NSBox alloc] initWithFrame:NSMakeRect(14, 46, 202, 1)];
-    separator.boxType = NSBoxSeparator;
-    [controller.view addSubview:separator];
-    NSButton *quit = [NSButton buttonWithTitle:@"Закрыть приложение" target:self action:@selector(quit:)];
-    quit.bordered = NO;
-    quit.alignment = NSTextAlignmentLeft;
-    quit.frame = NSMakeRect(18, 12, 194, 25);
-    [controller.view addSubview:quit];
-    self.popover = [NSPopover new];
-    self.popover.contentViewController = controller;
-    self.popover.contentSize = NSMakeSize(230, 100);
-    self.popover.behavior = NSPopoverBehaviorTransient;
+    NSMenuItem *website = [[NSMenuItem alloc] initWithTitle:@"Dzzen.com ↗" action:@selector(openWebsite:) keyEquivalent:@""];
+    website.target = self;
+    [self.menu addItem:website];
+    [self.menu addItem:NSMenuItem.separatorItem];
+    NSMenuItem *quit = [[NSMenuItem alloc] initWithTitle:@"Закрыть приложение" action:@selector(quit:) keyEquivalent:@"q"];
+    quit.target = self;
+    [self.menu addItem:quit];
     [self updateUI];
 
     void *framework = dlopen("/System/Library/PrivateFrameworks/DFRBrightness.framework/DFRBrightness", RTLD_NOW | RTLD_LOCAL);
@@ -83,7 +79,9 @@
 }
 
 - (void)updateUI {
-    self.toggle.state = self.enabled ? NSControlStateValueOn : NSControlStateValueOff;
+    self.toggle.title = self.enabled ? @"Touch Bar включён" : @"Touch Bar выключен";
+    self.toggle.bezelColor = self.enabled ? NSColor.systemGreenColor : NSColor.systemRedColor;
+    self.toggle.accessibilityValue = self.enabled ? @"Включён" : @"Выключен";
     self.statusItem.button.toolTip = self.enabled ? @"Touch Bar: включение выбрано" : @"Touch Bar: гашение выбрано";
 }
 
@@ -107,7 +105,7 @@
 
 - (void)togglePanel:(id)sender {
     (void)sender;
-    [self applyEnabled:self.toggle.state == NSControlStateValueOn];
+    [self applyEnabled:!self.enabled];
 }
 
 - (void)woke:(NSNotification *)notification {
@@ -118,15 +116,14 @@
     });
 }
 
-- (void)showPopover:(id)sender {
+- (void)openWebsite:(id)sender {
     (void)sender;
-    if (self.popover.shown) { [self.popover close]; return; }
-    [NSApp activateIgnoringOtherApps:YES];
-    [self.popover showRelativeToRect:self.statusItem.button.bounds ofView:self.statusItem.button preferredEdge:NSRectEdgeMinY];
+    NSURL *url = [NSURL URLWithString:@"https://dzzen.com/?utm_source=touchbar-off&utm_medium=app&utm_campaign=menu"];
+    [[NSWorkspace sharedWorkspace] openURL:url];
 }
 
 - (void)showError:(NSString *)message {
-    [self.popover close];
+    [self.menu cancelTracking];
     [NSApp activateIgnoringOtherApps:YES];
     NSAlert *alert = [NSAlert new];
     alert.messageText = @"Не удалось переключить Touch Bar";
