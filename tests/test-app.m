@@ -1,6 +1,6 @@
 // Проверка обработки команд без управления настоящей панелью.
 #define main app_entry_for_test
-#import "TouchBarApp.m"
+#import "../TouchBarApp.m"
 #undef main
 #include <assert.h>
 

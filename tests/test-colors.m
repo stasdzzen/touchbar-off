@@ -1,6 +1,6 @@
 // Проверка реально отрисованных пикселей без управления Touch Bar.
 #define main app_entry_for_color_test
-#import "TouchBarApp.m"
+#import "../TouchBarApp.m"
 #undef main
 #include <assert.h>
 
@@ -24,7 +24,7 @@ int main(void) { @autoreleasepool {
                 assert(pixel.alphaComponent > .99);
                 if (state) assert(pixel.greenComponent > pixel.redComponent * 2);
                 else assert(pixel.redComponent > pixel.greenComponent * 2);
-                NSString *file = [NSString stringWithFormat:@"build/button-%@-%@.png",appearance,state ? @"on" : @"off"];
+                NSString *file = [NSString stringWithFormat:@"build/tests/button-%@-%@.png",appearance,state ? @"on" : @"off"];
                 assert([[bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:file atomically:YES]);
             }
         }];
