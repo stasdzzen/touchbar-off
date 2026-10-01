@@ -11,10 +11,43 @@
 - (BOOL)turnOn;
 @end
 
+// Системное оформление NSButton может игнорировать bezelColor.
+// Рисуем только кнопку сами, сохраняя обработку нажатий и доступность NSButton.
+@interface TBStateButton : NSButton
+@property (nonatomic) BOOL panelEnabled;
+@end
+
+@implementation TBStateButton
+- (void)setPanelEnabled:(BOOL)value {
+    _panelEnabled = value;
+    self.needsDisplay = YES;
+}
+- (void)drawRect:(NSRect)dirtyRect {
+    (void)dirtyRect;
+    CGFloat alpha = self.enabled ? 1.0 : 0.45;
+    NSColor *background = self.panelEnabled
+        ? [NSColor colorWithSRGBRed:0.10 green:0.49 blue:0.25 alpha:alpha]
+        : [NSColor colorWithSRGBRed:0.78 green:0.16 blue:0.18 alpha:alpha];
+    NSBezierPath *shape = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect(self.bounds, 1, 1) xRadius:7 yRadius:7];
+    [background setFill];
+    [shape fill];
+    if (self.cell.isHighlighted) {
+        [[NSColor colorWithWhite:0 alpha:0.16] setFill];
+        [shape fill];
+    }
+    NSDictionary *attributes = @{
+        NSFontAttributeName: self.font ?: [NSFont systemFontOfSize:13 weight:NSFontWeightMedium],
+        NSForegroundColorAttributeName: [NSColor colorWithWhite:1 alpha:alpha]
+    };
+    NSSize size = [self.title sizeWithAttributes:attributes];
+    [self.title drawAtPoint:NSMakePoint(round((NSWidth(self.bounds) - size.width) / 2), round((NSHeight(self.bounds) - size.height) / 2)) withAttributes:attributes];
+}
+@end
+
 @interface AppDelegate : NSObject <NSApplicationDelegate>
 @property NSStatusItem *statusItem;
 @property NSMenu *menu;
-@property NSButton *toggle;
+@property TBStateButton *toggle;
 @property id brightnessClient;
 @property BOOL enabled;
 @property BOOL ready;
@@ -38,11 +71,11 @@
 
     // Обычное меню macOS; собственная только строка цветной кнопки.
     NSView *row = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 218, 44)];
-    self.toggle = [NSButton buttonWithTitle:@"" target:self action:@selector(togglePanel:)];
-    self.toggle.frame = NSMakeRect(14, 7, 190, 30);
-    self.toggle.bezelStyle = NSBezelStyleRounded;
+    self.toggle = [[TBStateButton alloc] initWithFrame:NSMakeRect(14, 7, 190, 30)];
+    self.toggle.target = self;
+    self.toggle.action = @selector(togglePanel:);
+    self.toggle.bordered = NO;
     self.toggle.font = [NSFont systemFontOfSize:13 weight:NSFontWeightMedium];
-    self.toggle.contentTintColor = NSColor.whiteColor;
     self.toggle.accessibilityLabel = @"Переключить Touch Bar";
     self.toggle.enabled = NO;
     [row addSubview:self.toggle];
@@ -80,7 +113,7 @@
 
 - (void)updateUI {
     self.toggle.title = self.enabled ? @"Touch Bar включён" : @"Touch Bar выключен";
-    self.toggle.bezelColor = self.enabled ? NSColor.systemGreenColor : NSColor.systemRedColor;
+    self.toggle.panelEnabled = self.enabled;
     self.toggle.accessibilityValue = self.enabled ? @"Включён" : @"Выключен";
     self.statusItem.button.toolTip = self.enabled ? @"Touch Bar: включение выбрано" : @"Touch Bar: гашение выбрано";
 }
