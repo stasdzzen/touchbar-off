@@ -1,5 +1,6 @@
 // Copyright (c) 2026 Dzzen.com. SPDX-License-Identifier: MIT
 #import <Cocoa/Cocoa.h>
+#import "KeyboardLock.h"
 #include <dlfcn.h>
 
 // Сигнатуры сверены с Objective-C runtime на macOS 26.6.2.
@@ -44,10 +45,13 @@
 }
 @end
 
-@interface AppDelegate : NSObject <NSApplicationDelegate>
+@interface AppDelegate : NSObject <NSApplicationDelegate, NSMenuDelegate>
 @property NSStatusItem *statusItem;
 @property NSMenu *menu;
 @property TBStateButton *toggle;
+@property TBStateButton *keyboardToggle;
+@property NSMenuItem *keyboardStatus;
+@property TBKeyboardLock *keyboardLock;
 @property id brightnessClient;
 @property BOOL enabled;
 @property BOOL ready;
@@ -67,11 +71,12 @@
     self.statusItem.button.accessibilityLabel = @"Touch Bar";
     self.menu = [NSMenu new];
     self.menu.autoenablesItems = NO;
+    self.menu.delegate = self;
     self.statusItem.menu = self.menu;
 
     // Обычное меню macOS; собственная только строка цветной кнопки.
-    NSView *row = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 218, 44)];
-    self.toggle = [[TBStateButton alloc] initWithFrame:NSMakeRect(14, 7, 190, 30)];
+    NSView *row = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 258, 44)];
+    self.toggle = [[TBStateButton alloc] initWithFrame:NSMakeRect(14, 7, 230, 30)];
     self.toggle.target = self;
     self.toggle.action = @selector(togglePanel:);
     self.toggle.bordered = NO;
@@ -83,6 +88,29 @@
     control.view = row;
     [self.menu addItem:control];
 
+    NSView *keyboardRow = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 258, 44)];
+    self.keyboardToggle = [[TBStateButton alloc] initWithFrame:NSMakeRect(14, 7, 230, 30)];
+    self.keyboardToggle.target = self;
+    self.keyboardToggle.action = @selector(toggleKeyboard:);
+    self.keyboardToggle.bordered = NO;
+    self.keyboardToggle.font = [NSFont systemFontOfSize:13 weight:NSFontWeightMedium];
+    self.keyboardToggle.accessibilityLabel = @"Блокировка клавиатуры для чистки";
+    [keyboardRow addSubview:self.keyboardToggle];
+    NSMenuItem *keyboardControl = [NSMenuItem new];
+    keyboardControl.view = keyboardRow;
+    [self.menu addItem:keyboardControl];
+    self.keyboardStatus = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
+    self.keyboardStatus.enabled = NO;
+    [self.menu addItem:self.keyboardStatus];
+    self.keyboardLock = [TBKeyboardLock new];
+    __weak AppDelegate *weakSelf = self;
+    self.keyboardLock.stateChanged = ^{ [weakSelf updateKeyboardUI]; };
+
+    // Lifecycle клавиатуры независим от наличия клиента Touch Bar.
+    NSNotificationCenter *workspaceCenter = [[NSWorkspace sharedWorkspace] notificationCenter];
+    [workspaceCenter addObserver:self selector:@selector(unlockKeyboardForLifecycle:) name:NSWorkspaceWillSleepNotification object:nil];
+    [workspaceCenter addObserver:self selector:@selector(unlockKeyboardForLifecycle:) name:NSWorkspaceSessionDidResignActiveNotification object:nil];
+
     NSMenuItem *website = [[NSMenuItem alloc] initWithTitle:@"Dzzen.com ↗" action:@selector(openWebsite:) keyEquivalent:@""];
     website.target = self;
     [self.menu addItem:website];
@@ -91,6 +119,7 @@
     quit.target = self;
     [self.menu addItem:quit];
     [self updateUI];
+    [self updateKeyboardUI];
 
     void *framework = dlopen("/System/Library/PrivateFrameworks/DFRBrightness.framework/DFRBrightness", RTLD_NOW | RTLD_LOCAL);
     Class clientClass = framework ? NSClassFromString(@"DFRBrightnessClient") : Nil;
@@ -141,6 +170,43 @@
     [self applyEnabled:!self.enabled];
 }
 
+- (void)updateKeyboardUI {
+    BOOL locked = self.keyboardLock.isLocked;
+    self.keyboardToggle.title = locked ? @"Разблокировать клавиатуру" : @"Заблокировать клавиатуру";
+    self.keyboardToggle.panelEnabled = !locked;
+    self.keyboardToggle.accessibilityValue = locked ? @"Заблокирована" : @"Доступна";
+    self.keyboardStatus.title = locked ? @"Клавиатура заблокирована для чистки" : @"Клавиатура доступна";
+    self.keyboardStatus.toolTip = self.keyboardLock.status;
+    self.keyboardToggle.toolTip = self.keyboardLock.status;
+}
+
+- (void)menuNeedsUpdate:(NSMenu *)menu {
+    (void)menu;
+    // Перечитываем доступность реального tap перед показом меню.
+    [self updateKeyboardUI];
+}
+
+- (void)toggleKeyboard:(id)sender {
+    (void)sender;
+    if (self.keyboardLock.isLocked) [self.keyboardLock unlock];
+    else if (![self.keyboardLock lock]) {
+        [self.menu cancelTracking];
+        [NSApp activateIgnoringOtherApps:YES];
+        NSAlert *alert = [NSAlert new];
+        alert.messageText = @"Клавиатура не заблокирована";
+        alert.informativeText = [self.keyboardLock.status stringByAppendingString:
+            @". Проверьте разрешение в Системных настройках → Конфиденциальность и безопасность → Универсальный доступ. После выдачи разрешения нажмите кнопку снова; если macOS требует перезапуск, закройте и откройте приложение. Если разрешение уже есть, эта версия macOS могла отклонить HID event tap; клавиатура остаётся доступной."];
+        [alert addButtonWithTitle:@"Понятно"];
+        [alert runModal];
+    }
+    [self updateKeyboardUI];
+}
+
+- (void)unlockKeyboardForLifecycle:(NSNotification *)notification {
+    (void)notification;
+    [self.keyboardLock unlockWithStatus:@"Клавиатура доступна: блокировка снята при сне или смене сессии"];
+}
+
 - (void)woke:(NSNotification *)notification {
     (void)notification;
     // Повторяем последний выбор после пробуждения, без постоянного опроса.
@@ -167,11 +233,13 @@
 
 - (void)quit:(id)sender {
     (void)sender;
+    [self.keyboardLock unlock];
     [NSApp terminate:nil];
 }
 
 - (void)applicationWillTerminate:(NSNotification *)notification {
     (void)notification;
+    [self.keyboardLock unlock];
     [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver:self];
     // Не включаем мерцающую панель при закрытии приложения.
     [self.brightnessClient unscheduleWithDispatchQueue:dispatch_get_main_queue()];

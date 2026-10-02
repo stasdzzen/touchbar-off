@@ -7,7 +7,7 @@ xcrun clang -Os -Wall -Wextra -Werror -fobjc-arc -framework Cocoa render-icons.m
 build/render-icons build/icons
 iconutil -c icns build/icons/AppIcon.iconset -o "$app_bundle/Contents/Resources/AppIcon.icns"
 cp build/icons/MenuIcon.png build/icons/MenuIcon@2x.png "$app_bundle/Contents/Resources/"
-xcrun clang -Os -Wall -Wextra -Werror -fobjc-arc -mmacosx-version-min=13.0 -framework Cocoa TouchBarApp.m -o "$app_bundle/Contents/MacOS/TouchBarApp"
+xcrun clang -Os -Wall -Wextra -Werror -fobjc-arc -mmacosx-version-min=13.0 -framework Cocoa -framework ApplicationServices TouchBarApp.m KeyboardLock.m -o "$app_bundle/Contents/MacOS/TouchBarApp"
 cp Info.plist "$app_bundle/Contents/Info.plist"
 cp LICENSE "$app_bundle/Contents/Resources/LICENSE"
 codesign --force --sign - "$app_bundle"
