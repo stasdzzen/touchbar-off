@@ -5,27 +5,7 @@
 #import <IOKit/hidsystem/ev_keymap.h>
 #include <assert.h>
 
-@interface FakeKeyboardBackend : NSObject <TBKeyboardBackend>
-@property BOOL permission;
-@property BOOL create;
-@property BOOL active;
-@property BOOL enableOnStart;
-@property int permissionCalls;
-@property int startCalls;
-@property int stopCalls;
-@property (copy) TBKeyboardEventHandler handler;
-@end
-@implementation FakeKeyboardBackend
-- (BOOL)requestAccessibility { self.permissionCalls++; return self.permission; }
-- (BOOL)startWithHandler:(TBKeyboardEventHandler)handler {
-    self.startCalls++;
-    self.handler = handler;
-    self.active = self.create && self.enableOnStart;
-    return self.create;
-}
-- (BOOL)isEnabled { return self.active; }
-- (void)stop { self.stopCalls++; self.active = NO; self.handler = nil; }
-@end
+#import "FakeKeyboardBackend.h"
 
 static CGEventRef MediaEvent(unsigned int key) {
     NSEvent *event = [NSEvent otherEventWithType:NSEventTypeSystemDefined location:NSZeroPoint
@@ -124,13 +104,13 @@ int main(void) { @autoreleasepool {
 
     AppDelegate *app = [AppDelegate new];
     app.keyboardLock = lock;
-    app.keyboardToggle = [[TBStateButton alloc] initWithFrame:NSMakeRect(0, 0, 230, 30)];
-    app.keyboardStatus = [NSMenuItem new];
+    [app createMenu];
     assert([lock lock]);
     [app updateKeyboardUI];
-    assert([app.keyboardToggle.title isEqualToString:@"Разблокировать клавиатуру"]);
+    assert(app.keyboardToggle.state == NSControlStateValueOn);
+    app.keyboardToggle.state = NSControlStateValueOff;
     [app toggleKeyboard:nil];
-    assert(!lock.isLocked && [app.keyboardToggle.title isEqualToString:@"Заблокировать клавиатуру"]);
+    assert(!lock.isLocked && app.keyboardToggle.state == NSControlStateValueOff);
     assert(!app.ready && !app.brightnessClient); // Клавиатура работает независимо от DFR.
     for (NSString *name in @[NSWorkspaceWillSleepNotification, NSWorkspaceSessionDidResignActiveNotification]) {
         assert([lock lock]);
